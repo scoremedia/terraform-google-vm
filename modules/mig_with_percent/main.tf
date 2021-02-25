@@ -29,7 +29,8 @@ locals {
 }
 
 data "google_compute_zones" "available" {
-  region = var.region
+  project = var.project_id
+  region  = var.region
 }
 
 resource "google_compute_region_instance_group_manager" "mig_with_percent" {
@@ -63,6 +64,8 @@ resource "google_compute_region_instance_group_manager" "mig_with_percent" {
   target_pools = var.target_pools
   target_size  = var.autoscaling_enabled ? null : var.target_size
 
+  wait_for_instances = var.wait_for_instances
+
   dynamic "auto_healing_policies" {
     for_each = local.healthchecks
     content {
@@ -71,23 +74,38 @@ resource "google_compute_region_instance_group_manager" "mig_with_percent" {
     }
   }
 
+  dynamic "stateful_disk" {
+    for_each = var.stateful_disks
+    content {
+      device_name = stateful_disk.value.device_name
+      delete_rule = lookup(stateful_disk.value, "delete_rule", null)
+    }
+  }
+
   distribution_policy_zones = local.distribution_policy_zones
   dynamic "update_policy" {
     for_each = var.update_policy
     content {
-      max_surge_fixed         = lookup(update_policy.value, "max_surge_fixed", null)
-      max_surge_percent       = lookup(update_policy.value, "max_surge_percent", null)
-      max_unavailable_fixed   = lookup(update_policy.value, "max_unavailable_fixed", null)
-      max_unavailable_percent = lookup(update_policy.value, "max_unavailable_percent", null)
-      min_ready_sec           = lookup(update_policy.value, "min_ready_sec", null)
-      minimal_action          = update_policy.value.minimal_action
-      type                    = update_policy.value.type
+      instance_redistribution_type = lookup(update_policy.value, "instance_redistribution_type", null)
+      max_surge_fixed              = lookup(update_policy.value, "max_surge_fixed", null)
+      max_surge_percent            = lookup(update_policy.value, "max_surge_percent", null)
+      max_unavailable_fixed        = lookup(update_policy.value, "max_unavailable_fixed", null)
+      max_unavailable_percent      = lookup(update_policy.value, "max_unavailable_percent", null)
+      min_ready_sec                = lookup(update_policy.value, "min_ready_sec", null)
+      minimal_action               = update_policy.value.minimal_action
+      type                         = update_policy.value.type
     }
   }
 
   lifecycle {
     create_before_destroy = true
     ignore_changes        = [distribution_policy_zones]
+  }
+
+  timeouts {
+    create = var.mig_timeouts.create
+    update = var.mig_timeouts.update
+    delete = var.mig_timeouts.delete
   }
 }
 
@@ -96,7 +114,9 @@ resource "google_compute_region_autoscaler" "autoscaler" {
   count    = var.autoscaling_enabled ? 1 : 0
   name     = "${var.hostname}-autoscaler"
   project  = var.project_id
-  target   = google_compute_region_instance_group_manager.mig_with_percent.self_link
+  region   = var.region
+
+  target = google_compute_region_instance_group_manager.mig_with_percent.self_link
 
   autoscaling_policy {
     max_replicas    = var.max_replicas
@@ -124,7 +144,7 @@ resource "google_compute_region_autoscaler" "autoscaler" {
     }
   }
 
-  depends_on = ["google_compute_region_instance_group_manager.mig_with_percent"]
+  depends_on = [google_compute_region_instance_group_manager.mig_with_percent]
 }
 
 resource "google_compute_health_check" "http" {
