@@ -63,4 +63,3 @@ variable "region" {
   description = "Region where the instances should be created."
   default     = null
 }
-
