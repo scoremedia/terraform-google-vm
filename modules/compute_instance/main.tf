@@ -61,11 +61,11 @@ resource "google_compute_instance_from_template" "compute_instance" {
 
   source_instance_template = var.instance_template
 
-# DEVOPS-1881: protect betworks instances from accidental deletion
-# TBD: terraform does not support the use of interpolations in lifecycle attributes https://github.com/hashicorp/terraform/issues/3116
+  # DEVOPS-1881: protect betworks instances from accidental deletion
+  # TBD: terraform does not support the use of interpolations in lifecycle attributes https://github.com/hashicorp/terraform/issues/3116
   lifecycle {
     prevent_destroy = true
-    ignore_changes = [source_instance_template]
+    ignore_changes  = [source_instance_template]
   }
 }
 
